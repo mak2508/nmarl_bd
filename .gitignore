@@ -1,0 +1,5 @@
+**/__pycache__/
+venv/
+envs/large_grid_data/exp*
+envs/large_grid_data/*.out
+experiments/

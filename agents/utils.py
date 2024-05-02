@@ -113,7 +113,7 @@ class OnPolicyBuffer(TransBuffer):
         Rs = np.array(self.Rs, dtype=np.float32)
         Advs = np.array(self.Advs, dtype=np.float32)
         # use pre-step dones here
-        dones = np.array(self.dones[:-1], dtype=np.bool)
+        dones = np.array(self.dones[:-1], dtype=bool)
         self.reset(self.dones[-1])
         return obs, nas, acts, dones, Rs, Advs
 
@@ -187,7 +187,7 @@ class MultiAgentOnPolicyBuffer(OnPolicyBuffer):
         acts = np.transpose(np.array(self.acts, dtype=np.int32))
         Rs = np.array(self.Rs, dtype=np.float32)
         Advs = np.array(self.Advs, dtype=np.float32)
-        dones = np.array(self.dones[:-1], dtype=np.bool)
+        dones = np.array(self.dones[:-1], dtype=bool)
         self.reset(self.dones[-1])
         return obs, policies, acts, dones, Rs, Advs
 
