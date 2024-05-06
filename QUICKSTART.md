@@ -1,4 +1,4 @@
-### Usages
+## Usages
 ## Install Dependencies
 1. Setup virtual environment
 ~~~
@@ -7,18 +7,39 @@ source venv/bin/activate
 pip install -r requirements.txt
 ~~~
 
-2. Install SUMO
-- Please follow instructions [here](https://sumo.dlr.de/docs/Installing/index.html) 
-- Make sure to update `SUMO_HOME` and `PYTHONPATH`. On mac, this can be done by
- appending to your `~/.bashrc`/`~/.zshrc` the following:
-~~~
-export SUMO_HOME=/usr/local/opt/sumo/share/sumo
-export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
-~~~
-Then, run
-~~~
-source ~/.zshrc
-~~~
+2. Install SUMO 
+    1. Euler\
+    If you are on Euler, installing SUMO from a binary does not work since you lack root privileges. Instead, please follow the following instructions:
+    ~~~bash
+    # load dependencies
+    source load_modules.sh
+    # clone sumo repository
+    git clone --recursive https://github.com/eclipse-sumo/sumo
+    # install sumo
+    cd sumo
+    export SUMO_HOME="$PWD"
+    cmake -D FOX_INCLUDE_DIR=/cluster/apps/nss/gcc-8.2.0/fox/1.6.57/x86_64/include/fox-1.6 -B build .
+    cmake --build build -j$(nproc)
+    export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
+    ~~~
+    So that sumo works everytime you sign into Euler, we suggest adding the follwing to your `~/.bashrc`
+    ~~~bash
+    export SUMO_HOME=<path-to-sumo-repo>
+    export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
+    ~~~
+
+    2. Others
+    - Please follow instructions [here](https://sumo.dlr.de/docs/Installing/index.html) 
+    - Make sure to update `SUMO_HOME` and `PYTHONPATH`. On mac, this can be done by
+    appending to your `~/.bashrc`/`~/.zshrc` the following:
+    ~~~bash
+    export SUMO_HOME=/usr/local/opt/sumo/share/sumo
+    export PYTHONPATH=$SUMO_HOME/tools:$PYTHONPATH
+    ~~~
+    Then, run
+    ~~~bash
+    source ~/.zshrc
+    ~~~
 
 
 ## Experiments
@@ -35,28 +56,29 @@ In CACC, the objective is to adaptively coordinate a platoon of vehicles to mini
 
 ## Run ATSC-grid example
 This is a simple, 5x5 grid example for Adaptive Traffic Signal Control (traffic lights).
-1. Generate SUMO files
-~~~
-(cd envs/large_grid_data && python build_file.py)
+0. Make sure environment and modules are loaded
+~~~bash
+source load_modules.sh
+source venv/bin/activate
 ~~~
 
-2. Create directory for experiment
-~~~
+1. Create directory for experiment
+~~~bash
 mkdir -p ./experiments/atsc_grid1
 ~~~
 
-3. Generate SUMO network files for grid environment
-~~~
-(cd envs/large_grid_data && python build_file.py)
+2. (For Euler User) Start a session with GPU access
+~~~bash
+srun -n 4 --mem-per-cpu=4000 --gpus=1 --pty bash
 ~~~
 
-4. Run experiment
-~~~
+3. Run experiment
+~~~bash
 python3 main.py --base-dir experiments/atsc_grid1 train --config-dir config/config_ia2c_grid.ini
 ~~~
 
 4. (optional) View training progress on Tensorboard
-~~~
+~~~bash
 tensorboard --logdir=experiments/atsc_grid1/log
 ~~~
 You can find the dashboard at http://localhost:6006/ 
