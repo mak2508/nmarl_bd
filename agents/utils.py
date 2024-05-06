@@ -6,6 +6,8 @@ import torch.nn as nn
 initializers
 """
 def init_layer(layer, layer_type):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    layer.to(device)
     if layer_type == 'fc':
         nn.init.orthogonal_(layer.weight.data)
         nn.init.constant_(layer.bias.data, 0)
@@ -43,13 +45,13 @@ def run_rnn(layer, xs, dones, s):
     return torch.cat(outputs), torch.squeeze(s)
 
 
-def one_hot(x, oh_dim, dim=-1):
+def one_hot(x, oh_dim, device, dim=-1):
     oh_shape = list(x.shape)
     if dim == -1:
         oh_shape.append(oh_dim)
     else:
         oh_shape = oh_shape[:dim+1] + [oh_dim] + oh_shape[dim+1:]
-    x_oh = torch.zeros(oh_shape)
+    x_oh = torch.zeros(oh_shape).to(device)
     x = torch.unsqueeze(x, -1)
     if dim == -1:
         x_oh = x_oh.scatter(dim, x, 1)

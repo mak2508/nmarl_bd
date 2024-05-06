@@ -20,7 +20,7 @@ class IA2C:
     limited to neighborhood area only.
     """
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0, use_gpu=False):
+                 total_step, model_config, seed=0, use_gpu=True):
         self.name = 'ia2c'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
                         total_step, seed, use_gpu, model_config)
@@ -149,15 +149,15 @@ class IA2C:
             n_n = np.sum(self.neighbor_mask[i])
             if self.identical_agent:
                 local_policy = LstmPolicy(self.n_s_ls[i], self.n_a_ls[i], n_n, self.n_step,
-                                          n_fc=self.n_fc, n_lstm=self.n_lstm, name='{:d}'.format(i))
+                                          n_fc=self.n_fc, n_lstm=self.n_lstm, 
+                                          name='{:d}'.format(i), device=self.device)
             else:
                 na_dim_ls = []
                 for j in np.where(self.neighbor_mask[i] == 1)[0]:
                     na_dim_ls.append(self.n_a_ls[j])
                 local_policy = LstmPolicy(self.n_s_ls[i], self.n_a_ls[i], n_n, self.n_step,
                                           n_fc=self.n_fc, n_lstm=self.n_lstm, name='{:d}'.format(i),
-                                          na_dim_ls=na_dim_ls, identical=False)
-                # local_policy.to(self.device)
+                                          na_dim_ls=na_dim_ls, identical=False, device=self.device)
             policy.append(local_policy)
         return nn.ModuleList(policy)
 
@@ -205,7 +205,7 @@ class IA2C_FP(IA2C):
     In fingerprint IA2C, neighborhood policies (fingerprints) are also included.
     """
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0, use_gpu=False):
+                 total_step, model_config, seed=0, use_gpu=True):
         self.name = 'ia2c_fp'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma, 
                         total_step, seed, use_gpu, model_config)
@@ -232,7 +232,7 @@ class IA2C_FP(IA2C):
 
 class MA2C_NC(IA2C):
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0,  use_gpu=False):
+                 total_step, model_config, seed=0,  use_gpu=True):
         self.name = 'ma2c_nc'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
                         total_step, seed, use_gpu, model_config)
@@ -296,7 +296,7 @@ class MA2C_NC(IA2C):
 
 class IA2C_CU(MA2C_NC):
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0, use_gpu=False):
+                 total_step, model_config, seed=0, use_gpu=True):
         self.name = 'ma2c_cu'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
                         total_step, seed, use_gpu, model_config)
@@ -317,7 +317,7 @@ class IA2C_CU(MA2C_NC):
 
 class MA2C_CNET(MA2C_NC):
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0, use_gpu=False):
+                 total_step, model_config, seed=0, use_gpu=True):
         self.name = 'ma2c_ic3'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
                         total_step, seed, use_gpu, model_config)
@@ -334,7 +334,7 @@ class MA2C_CNET(MA2C_NC):
 
 class MA2C_DIAL(MA2C_NC):
     def __init__(self, n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
-                 total_step, model_config, seed=0, use_gpu=False):
+                 total_step, model_config, seed=0, use_gpu=True):
         self.name = 'ma2c_dial'
         self._init_algo(n_s_ls, n_a_ls, neighbor_mask, distance_mask, coop_gamma,
                         total_step, seed, use_gpu, model_config)

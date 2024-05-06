@@ -6,7 +6,7 @@ from agents.utils import batch_to_seq, init_layer, one_hot, run_rnn
 
 
 class Policy(nn.Module):
-    def __init__(self, n_a, n_s, n_step, policy_name, agent_name, identical):
+    def __init__(self, n_a, n_s, n_step, policy_name, agent_name, identical, device):
         super(Policy, self).__init__()
         self.name = policy_name
         if agent_name is not None:
@@ -16,6 +16,8 @@ class Policy(nn.Module):
         self.n_s = n_s
         self.n_step = n_step
         self.identical = identical
+        self.device = device
+        self.to(device)
 
     def forward(self, ob, *_args, **_kwargs):
         raise NotImplementedError()
@@ -43,9 +45,9 @@ class Policy(nn.Module):
         if n_n is None:
             n_n = int(self.n_n)
         if n_n:
-            na = torch.from_numpy(na).long()
+            na = torch.from_numpy(na).long().to(self.device)
             if self.identical:
-                na_sparse = one_hot(na, self.n_a)
+                na_sparse = one_hot(na, self.n_a, self.device)
                 na_sparse = na_sparse.view(-1, self.n_a*n_n)
             else:
                 na_sparse = []
@@ -76,9 +78,9 @@ class Policy(nn.Module):
 
 
 class LstmPolicy(Policy):
-    def __init__(self, n_s, n_a, n_n, n_step, n_fc=64, n_lstm=64, name=None,
+    def __init__(self, n_s, n_a, n_n, n_step, device, n_fc=64, n_lstm=64, name=None,
                  na_dim_ls=None, identical=True):
-        super(LstmPolicy, self).__init__(n_a, n_s, n_step, 'lstm', name, identical)
+        super(LstmPolicy, self).__init__(n_a, n_s, n_step, 'lstm', name, identical, device)
         if not self.identical:
             self.na_dim_ls = na_dim_ls
         self.n_lstm = n_lstm
@@ -89,8 +91,8 @@ class LstmPolicy(Policy):
 
     def backward(self, obs, nactions, acts, dones, Rs, Advs,
                  e_coef, v_coef, summary_writer=None, global_step=None):
-        obs = torch.from_numpy(obs).float()
-        dones = torch.from_numpy(dones).float()
+        obs = torch.from_numpy(obs).float().to(self.device)
+        dones = torch.from_numpy(dones).float().to(self.device)
         xs = self._encode_ob(obs)
         hs, new_states = run_rnn(self.lstm_layer, xs, dones, self.states_bw)
         # backward grad is limited to the minibatch
@@ -99,24 +101,25 @@ class LstmPolicy(Policy):
         vs = self._run_critic_head(hs, nactions)
         self.policy_loss, self.value_loss, self.entropy_loss = \
             self._run_loss(actor_dist, e_coef, v_coef, vs,
-                           torch.from_numpy(acts).long(),
-                           torch.from_numpy(Rs).float(),
-                           torch.from_numpy(Advs).float())
+                           torch.from_numpy(acts).long().to(self.device),
+                           torch.from_numpy(Rs).float().to(self.device),
+                           torch.from_numpy(Advs).float().to(self.device))
         self.loss = self.policy_loss + self.value_loss + self.entropy_loss
         self.loss.backward()
         if summary_writer is not None:
             self._update_tensorboard(summary_writer, global_step)
 
     def forward(self, ob, done, naction=None, out_type='p'):
-        ob = torch.from_numpy(np.expand_dims(ob, axis=0)).float()
-        done = torch.from_numpy(np.expand_dims(done, axis=0)).float()
+        ob = torch.from_numpy(np.expand_dims(ob, axis=0)).float().to(self.device)
+        done = torch.from_numpy(np.expand_dims(done, axis=0)).float().to(self.device)
         x = self._encode_ob(ob)
+
         h, new_states = run_rnn(self.lstm_layer, x, done, self.states_fw)
         if out_type.startswith('p'):
             self.states_fw = new_states.detach()
-            return F.softmax(self.actor_head(h), dim=1).squeeze().detach().numpy()
+            return F.softmax(self.actor_head(h), dim=1).squeeze().detach().cpu().numpy()
         else:
-            return self._run_critic_head(h, np.array([naction])).detach().numpy()
+            return self._run_critic_head(h, np.array([naction])).detach().cpu().numpy()
 
     def _encode_ob(self, ob):
         return F.relu(self.fc_layer(ob))
@@ -131,12 +134,12 @@ class LstmPolicy(Policy):
 
     def _reset(self):
         # forget the cumulative states every cum_step
-        self.states_fw = torch.zeros(self.n_lstm * 2)
-        self.states_bw = torch.zeros(self.n_lstm * 2)
+        self.states_fw = torch.zeros(self.n_lstm * 2).to(self.device)
+        self.states_bw = torch.zeros(self.n_lstm * 2).to(self.device)
 
 
 class FPPolicy(LstmPolicy):
-    def __init__(self, n_s, n_a, n_n, n_step, n_fc=64, n_lstm=64, name=None,
+    def __init__(self, n_s, n_a, n_n, n_step, device="cuda", n_fc=64, n_lstm=64, name=None,
                  na_dim_ls=None, identical=True):
         super(FPPolicy, self).__init__(n_s, n_a, n_n, n_step, n_fc, n_lstm, name,
                          na_dim_ls, identical)
@@ -185,10 +188,10 @@ class NCMultiAgentPolicy(Policy):
 
     def backward(self, obs, fps, acts, dones, Rs, Advs,
                  e_coef, v_coef, summary_writer=None, global_step=None):
-        obs = torch.from_numpy(obs).float().transpose(0, 1)
-        dones = torch.from_numpy(dones).float()
-        fps = torch.from_numpy(fps).float().transpose(0, 1)
-        acts = torch.from_numpy(acts).long()
+        obs = torch.from_numpy(obs).float().transpose(0, 1).to(self.device)
+        dones = torch.from_numpy(dones).float().to(self.device)
+        fps = torch.from_numpy(fps).float().transpose(0, 1).to(self.device)
+        acts = torch.from_numpy(acts).long().to(self.device)
         hs, new_states = self._run_comm_layers(obs, dones, fps, self.states_bw)
         # backward grad is limited to the minibatch
         self.states_bw = new_states.detach()
@@ -197,8 +200,8 @@ class NCMultiAgentPolicy(Policy):
         self.policy_loss = 0
         self.value_loss = 0
         self.entropy_loss = 0
-        Rs = torch.from_numpy(Rs).float()
-        Advs = torch.from_numpy(Advs).float()
+        Rs = torch.from_numpy(Rs).float().to(self.device)
+        Advs = torch.from_numpy(Advs).float().to(self.device)
         for i in range(self.n_agent):
             actor_dist_i = torch.distributions.categorical.Categorical(logits=ps[i])
             policy_loss_i, value_loss_i, entropy_loss_i = \
@@ -214,20 +217,20 @@ class NCMultiAgentPolicy(Policy):
 
     def forward(self, ob, done, fp, action=None, out_type='p'):
         # TxNxm
-        ob = torch.from_numpy(np.expand_dims(ob, axis=0)).float()
-        done = torch.from_numpy(np.expand_dims(done, axis=0)).float()
-        fp = torch.from_numpy(np.expand_dims(fp, axis=0)).float()
+        ob = torch.from_numpy(np.expand_dims(ob, axis=0)).float().to(self.device)
+        done = torch.from_numpy(np.expand_dims(done, axis=0)).float().to(self.device)
+        fp = torch.from_numpy(np.expand_dims(fp, axis=0)).float().to(self.device)
         # h dim: NxTxm
         h, new_states = self._run_comm_layers(ob, done, fp, self.states_fw)
         if out_type.startswith('p'):
             self.states_fw = new_states.detach()
             return self._run_actor_heads(h, detach=True)
         else:
-            action = torch.from_numpy(np.expand_dims(action, axis=1)).long()
+            action = torch.from_numpy(np.expand_dims(action, axis=1)).long().to(self.device)
             return self._run_critic_heads(h, action, detach=True)
 
     def _get_comm_s(self, i, n_n, x, h, p):
-        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long()
+        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long().to(self.device)
         m_i = torch.index_select(h, 0, js).view(1, self.n_h * n_n)
         p_i = torch.index_select(p, 0, js)
         nx_i = torch.index_select(x, 0, js)
@@ -320,7 +323,7 @@ class NCMultiAgentPolicy(Policy):
         ps = []
         for i in range(self.n_agent):
             if detach:
-                p_i = F.softmax(self.actor_heads[i](hs[i]), dim=1).squeeze().detach().numpy()
+                p_i = F.softmax(self.actor_heads[i](hs[i]), dim=1).squeeze().detach().cpu().numpy()
             else:
                 p_i = F.log_softmax(self.actor_heads[i](hs[i]), dim=1)
             ps.append(p_i)
@@ -361,7 +364,7 @@ class NCMultiAgentPolicy(Policy):
         for i in range(self.n_agent):
             n_n = self.n_n_ls[i]
             if n_n:
-                js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long()
+                js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long().to(self.device)
                 na_i = torch.index_select(actions, 0, js)
                 na_i_ls = []
                 for j in range(n_n):
@@ -371,7 +374,7 @@ class NCMultiAgentPolicy(Policy):
                 h_i = hs[i]
             v_i = self.critic_heads[i](h_i).squeeze()
             if detach:
-                vs.append(v_i.detach().numpy())
+                vs.append(v_i.detach().cpu().numpy())
             else:
                 vs.append(v_i)
         return vs
@@ -479,7 +482,7 @@ class CommNetMultiAgentPolicy(NCMultiAgentPolicy):
         self.lstm_layers.append(lstm_layer)
 
     def _get_comm_s(self, i, n_n, x, h, p):
-        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long()
+        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long().to(self.device)
         m_i = torch.index_select(h, 0, js).mean(dim=0, keepdim=True)
         nx_i = torch.index_select(x, 0, js)
         if self.identical:
@@ -524,7 +527,7 @@ class DIALMultiAgentPolicy(NCMultiAgentPolicy):
         self.lstm_layers.append(lstm_layer)
 
     def _get_comm_s(self, i, n_n, x, h, p):
-        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long()
+        js = torch.from_numpy(np.where(self.neighbor_mask[i])[0]).long().to(self.device)
         m_i = torch.index_select(h, 0, js).view(1, self.n_h * n_n)
         nx_i = torch.index_select(x, 0, js)
         if self.identical:
